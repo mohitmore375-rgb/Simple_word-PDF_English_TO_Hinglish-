@@ -2,14 +2,14 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Animated,
-  Platform,
   StatusBar,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -18,493 +18,396 @@ import { useTheme } from '../context/ThemeContext';
 import { useAIModel } from '../context/AIModelContext';
 import { LoadingOverlay } from '../components/LoadingOverlay';
 import { Toast } from '../components/Toast';
-import { ConversionCard } from '../components/ConversionCard';
-import { converterService } from '../services/converter';
+import { BottomInputBar } from '../components/BottomInputBar';
+import { RecentHistoryCard } from '../components/RecentHistoryCard';
+import { SideDrawer } from '../components/SideDrawer';
+import { storageService } from '../services/storageService';
+import { chatService, ChatSession } from '../services/chatService';
 import { ocrService } from '../services/ocrService';
-import { storageService, HistoryItem } from '../services/storageService';
-import { modelDownloadService } from '../services/modelDownloadService';
 import { HomeStackParamList } from '../navigation/AppNavigator';
 
 type HomeNavProp = StackNavigationProp<HomeStackParamList, 'Home'>;
 
 export default function HomeScreen() {
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors, isDark } = useTheme();
   const { aiMode, modelStatus } = useAIModel();
   const navigation = useNavigation<HomeNavProp>();
 
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState('Converting...');
-  const [toast, setToast] = useState<{
-    visible: boolean;
-    message: string;
-    type: 'success' | 'error' | 'info';
-  }>({ visible: false, message: '', type: 'success' });
-  const [recentHistory, setRecentHistory] = useState<HistoryItem[]>([]);
-  const [pickedFile, setPickedFile] = useState<{ name: string; type: string } | null>(null);
+  const [isThinking, setIsThinking] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [recentSessions, setRecentSessions] = useState<ChatSession[]>([]);
+  const [toast, setToast] = useState({
+    visible: false, message: '', type: 'success' as 'success' | 'error' | 'info',
+  });
 
-  const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
-
-  // Button press animation
-  const btnScale = useRef(new Animated.Value(1)).current;
-
-  // Mode badge pulse animation
-  const badgePulse = useRef(new Animated.Value(1)).current;
+  // Animated greeting fade-in
+  const greetOpacity = useRef(new Animated.Value(0)).current;
+  const greetTranslate = useRef(new Animated.Value(18)).current;
 
   useEffect(() => {
     loadRecent();
+    Animated.parallel([
+      Animated.timing(greetOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(greetTranslate, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start();
   }, []);
 
-  // Pulse badge when mode changes
-  useEffect(() => {
-    Animated.sequence([
-      Animated.timing(badgePulse, { toValue: 1.12, duration: 150, useNativeDriver: true }),
-      Animated.timing(badgePulse, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start();
-  }, [aiMode]);
-
   const loadRecent = async () => {
-    const history = await storageService.getHistory();
-    setRecentHistory(history.slice(0, 5));
+    const sessions = await storageService.getChatSessions();
+    setRecentSessions(sessions.slice(0, 5));
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ visible: true, message, type });
   };
 
-  const animateBtn = (cb: () => void) => {
-    Animated.sequence([
-      Animated.timing(btnScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
-      Animated.timing(btnScale, { toValue: 1, duration: 80, useNativeDriver: true }),
-    ]).start(cb);
-  };
+  // ── Send Message → open Chat screen ────────────────────────────────────────
+  const handleSend = useCallback(async () => {
+    const text = inputText.trim();
+    if (!text) return;
 
-  const handleConvert = useCallback(() => {
-    if (!inputText.trim()) {
-      showToast('Please enter some text to convert', 'error');
-      return;
-    }
+    setIsThinking(true);
+    setInputText('');
 
-    // Guard: offline mode but model not ready
-    if (aiMode === 'offline') {
-      if (modelStatus === 'not_downloaded' || modelStatus === 'error') {
-        Alert.alert(
-          '📱 Model Not Downloaded',
-          'Please download the Gemma 2B model from the Labs tab before using offline mode.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-      if (modelStatus === 'downloading') {
-        showToast('Model is still downloading. Please wait.', 'info');
-        return;
-      }
-    }
+    // Create a new chat session and navigate immediately
+    const session = chatService.createSession(text);
+    const userMsg = chatService.createUserMessage(text);
+    session.messages.push(userMsg);
 
-    animateBtn(async () => {
-      setIsLoading(true);
-      setLoadingMsg(
-        aiMode === 'offline'
-          ? '🧠 Running Gemma 2B on-device...'
-          : '☁️ Calling V2-Neural Engine...'
-      );
+    await storageService.saveChatSession(session);
+    await loadRecent();
 
-      try {
-        const { result } = await converterService.convert(inputText.trim(), aiMode);
+    setIsThinking(false);
 
-        await storageService.saveItem({
-          originalText: inputText.trim(),
-          convertedText: result,
-          wordCount,
-          source: 'text',
-        });
-
-        navigation.navigate('Result', {
-          originalText: inputText.trim(),
-          convertedText: result,
-          source: 'text',
-        });
-
-        setInputText('');
-        setPickedFile(null);
-        await loadRecent();
-      } catch (err: any) {
-        const msg: string = err.message || 'Conversion failed. Retry.';
-
-        // Offer fallback to online if offline fails
-        if (aiMode === 'offline' && msg.includes('offline')) {
-          Alert.alert(
-            'Offline AI Error',
-            `${msg}\n\nWould you like to use Online AI instead?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Use Online AI',
-                onPress: async () => {
-                  setIsLoading(true);
-                  setLoadingMsg('☁️ Falling back to Online AI...');
-                  try {
-                    const { result } = await converterService.convert(inputText.trim(), 'online');
-                    await storageService.saveItem({
-                      originalText: inputText.trim(),
-                      convertedText: result,
-                      wordCount,
-                      source: 'text',
-                    });
-                    navigation.navigate('Result', {
-                      originalText: inputText.trim(),
-                      convertedText: result,
-                      source: 'text',
-                    });
-                    setInputText('');
-                    setPickedFile(null);
-                    await loadRecent();
-                  } catch (e2: any) {
-                    showToast(e2.message || 'Conversion failed.', 'error');
-                  } finally {
-                    setIsLoading(false);
-                  }
-                },
-              },
-            ]
-          );
-        } else {
-          showToast(msg, 'error');
-        }
-      } finally {
-        setIsLoading(false);
-      }
+    navigation.navigate('Chat', {
+      sessionId: session.id,
+      initialMessage: text,
     });
-  }, [inputText, aiMode, modelStatus]);
+  }, [inputText]);
 
-  const handleDocumentPick = async () => {
-    setIsLoading(true);
-    setLoadingMsg('Extracting text from document...');
+  // ── File upload → navigate to Convert tab ──────────────────────────────────
+  const handleUpload = async () => {
     try {
       const { text, fileName, fileType } = await ocrService.pickDocument();
       setInputText(text);
-      setPickedFile({ name: fileName, type: fileType });
       showToast(`${fileType} loaded — ${text.trim().split(/\s+/).length} words`, 'success');
     } catch (err: any) {
       if (err.message !== 'CANCELLED') {
-        showToast(err.message || 'Failed to extract text from file', 'error');
+        showToast(err.message || 'Failed to load file', 'error');
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleClearInput = () => {
-    setInputText('');
-    setPickedFile(null);
+  // ── Voice ──────────────────────────────────────────────────────────────────
+  const handleVoice = () => showToast('Voice input coming soon!', 'info');
+
+  // ── Open Settings ──────────────────────────────────────────────────────────
+  const handleOpenSettings = () => navigation.navigate('Settings');
+
+  // ── Drawer navigation ──────────────────────────────────────────────────────
+  const handleDrawerNavigate = (screen: string) => {
+    if (screen === 'History') {
+      navigation.getParent()?.navigate('HistoryTab');
+    } else if (screen === 'Labs') {
+      navigation.getParent()?.navigate('LabsTab');
+    } else if (screen === 'Settings') {
+      navigation.navigate('Settings');
+    } else if (screen === 'Convert') {
+      navigation.navigate('Home');
+    }
   };
 
-  // ── Mode Badge Config ────────────────────────────────────────────────────────
-  const modeBadge = {
-    online: { icon: '⚡', label: 'ONLINE · GEMINI', color: colors.success ?? '#00AA00', bg: (colors.successContainer ?? '#00800018') },
-    offline: { icon: '📱', label: 'OFFLINE · GEMMA 2B', color: colors.primary, bg: colors.primary + '18' },
-  }[aiMode];
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]} edges={['top']}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.surface}
-      />
+    <View style={[styles.root, { backgroundColor: colors.surface }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.surfaceContainer }]}>
-        <View>
-          <Text style={[styles.headerLabel, { color: colors.primary }]}>← PRECISION LAB</Text>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* ── HEADER ──────────────────────────────────────────────────────── */}
+        <View style={styles.header}>
+          {/* Hamburger */}
+          <TouchableOpacity
+            style={[styles.headerIconBtn, { backgroundColor: colors.surfaceContainerHigh }]}
+            onPress={() => setDrawerOpen(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <View style={styles.hamburger}>
+              <View style={[styles.hLine, { backgroundColor: colors.onSurface }]} />
+              <View style={[styles.hLine, styles.hLineMid, { backgroundColor: colors.onSurface }]} />
+              <View style={[styles.hLine, { backgroundColor: colors.onSurface }]} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Title */}
+          <Text style={[styles.headerTitle, { color: colors.onSurface }]}>Simplae Word</Text>
+
+          {/* Right: sync icon + avatar */}
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={[styles.headerIconBtn, { backgroundColor: colors.surfaceContainerHigh }]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={{ fontSize: 15, color: colors.onSurfaceVariant }}>⊡</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleOpenSettings}>
+              <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+                <Text style={styles.avatarText}>M</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity onPress={toggleTheme} style={styles.themeBtn}>
-          <Text style={{ fontSize: 22 }}>{isDark ? '🌙' : '☀️'}</Text>
-        </TouchableOpacity>
+
+        {/* ── SCROLLABLE CONTENT ───────────────────────────────────────────── */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* ── Greeting Section ────────────────────────────────────────── */}
+          <Animated.View
+            style={[
+              styles.greetSection,
+              { opacity: greetOpacity, transform: [{ translateY: greetTranslate }] },
+            ]}
+          >
+            <Text style={[styles.greetSub, { color: colors.onSurfaceVariant }]}>
+              {getGreeting()},
+            </Text>
+            <Text style={[styles.greetName, { color: colors.onSurface }]}>
+              Hi Mohit 👋
+            </Text>
+            <Text style={[styles.greetQuestion, { color: colors.onSurfaceVariant }]}>
+              How can I help you today?
+            </Text>
+          </Animated.View>
+
+          {/* ── Quick Action Chips ──────────────────────────────────────── */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}
+          >
+            {[
+              { label: 'Explain a concept', icon: '💡' },
+              { label: 'Write code', icon: '</>' },
+              { label: 'Translate text', icon: '⇄' },
+              { label: 'Summarize', icon: '📋' },
+            ].map((chip, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={[styles.chip, { backgroundColor: colors.surfaceContainer, borderColor: colors.cardBorder }]}
+                onPress={() => setInputText(chip.label + ' ')}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.chipIcon}>{chip.icon}</Text>
+                <Text style={[styles.chipLabel, { color: colors.onSurfaceVariant }]}>{chip.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* ── Recent History Section ──────────────────────────────────── */}
+          {recentSessions.length > 0 && (
+            <View style={styles.recentSection}>
+              <View style={styles.recentHeader}>
+                <Text style={[styles.recentTitle, { color: colors.onSurface }]}>Recent</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.getParent()?.navigate('HistoryTab')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.viewAll, { color: colors.primary }]}>View all</Text>
+                </TouchableOpacity>
+              </View>
+
+              {recentSessions.map((session) => (
+                <RecentHistoryCard
+                  key={session.id}
+                  session={session}
+                  onPress={() =>
+                    navigation.navigate('Chat', {
+                      sessionId: session.id,
+                      initialMessage: undefined,
+                    })
+                  }
+                  onLongPress={() => {
+                    Alert.alert('Options', session.title, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: session.isPinned ? 'Unpin' : 'Pin',
+                        onPress: async () => {
+                          await storageService.pinChatSession(session.id, !session.isPinned);
+                          loadRecent();
+                        },
+                      },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await storageService.deleteChatSession(session.id);
+                          loadRecent();
+                          showToast('Chat deleted', 'success');
+                        },
+                      },
+                    ]);
+                  }}
+                />
+              ))}
+
+              <TouchableOpacity
+                style={[styles.viewAllBtn, { borderColor: colors.outline }]}
+                onPress={() => navigation.getParent()?.navigate('HistoryTab')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.viewAllBtnText, { color: colors.onSurfaceVariant }]}>
+                  View all history
+                </Text>
+                <Text style={[styles.viewAllBtnArrow, { color: colors.onSurfaceDim }]}>›</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Empty state when no history */}
+          {recentSessions.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyIcon, { color: colors.onSurfaceDim }]}>✦</Text>
+              <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>
+                Ask me anything to get started
+              </Text>
+            </View>
+          )}
+
+          <View style={{ height: 120 }} />
+        </ScrollView>
+      </SafeAreaView>
+
+      {/* ── BOTTOM INPUT BAR ──────────────────────────────────────────────── */}
+      <View style={[styles.inputBarWrap, { backgroundColor: colors.surface }]}>
+        <BottomInputBar
+          value={inputText}
+          onChangeText={setInputText}
+          onSend={handleSend}
+          onUpload={handleUpload}
+          onSettings={handleOpenSettings}
+          onVoice={handleVoice}
+          isThinking={isThinking}
+          placeholder="Ask Simplae Word"
+        />
+        <View style={{ height: Platform.OS === 'android' ? 8 : 4 }} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardDismissMode="interactive"
-      >
-        {/* Hero title */}
-        <View style={styles.hero}>
-          <Text style={[styles.heroTitle, { color: colors.onSurface }]}>
-            Hinglish{'\n'}Converter
-          </Text>
-          <Text style={[styles.heroSub, { color: colors.onSurfaceVariant }]}>
-            CONVERT ENGLISH TO HINGLISH INSTANTLY
-          </Text>
+      {/* ── SIDE DRAWER ───────────────────────────────────────────────────── */}
+      <SideDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onNavigate={handleDrawerNavigate}
+        userName="Mohit"
+      />
 
-          {/* AI Mode Badge */}
-          <Animated.View style={{ transform: [{ scale: badgePulse }], alignSelf: 'flex-start', marginTop: 12 }}>
-            <View style={[styles.aiModeBadge, { backgroundColor: modeBadge.bg }]}>
-              <Text style={[styles.aiModeBadgeText, { color: modeBadge.color }]}>
-                {modeBadge.icon} {modeBadge.label}
-              </Text>
-            </View>
-          </Animated.View>
-        </View>
-
-        {/* Document picker card */}
-        <TouchableOpacity
-          style={[styles.docCard, { backgroundColor: colors.surfaceContainerHigh }]}
-          onPress={handleDocumentPick}
-          activeOpacity={0.8}
-          disabled={isLoading}
-        >
-          <View style={[styles.docIcon, { backgroundColor: colors.primary }]}>
-            <Text style={styles.docIconText}>⊞</Text>
-          </View>
-          <View style={styles.docInfo}>
-            <Text style={[styles.docTitle, { color: colors.onSurface }]}>
-              {pickedFile ? pickedFile.name : 'Import Document'}
-            </Text>
-            <Text style={[styles.docSub, { color: colors.onSurfaceVariant }]}>
-              {pickedFile ? `Type: ${pickedFile.type}` : 'PDF, DOCX, or Image (OCR)'}
-            </Text>
-          </View>
-          <View style={[styles.selectBtn, { borderColor: colors.primary }]}>
-            <Text style={[styles.selectBtnText, { color: colors.primary }]}>
-              {pickedFile ? 'CHANGE' : 'SELECT FILE'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Text input */}
-        <View style={[styles.inputCard, { backgroundColor: colors.surfaceContainerLowest }]}>
-          <TextInput
-            style={[styles.input, { color: colors.onSurface }]}
-            placeholder="Paste your English text here..."
-            placeholderTextColor={colors.onSurfaceDim}
-            multiline
-            value={inputText}
-            onChangeText={setInputText}
-            textAlignVertical="top"
-            editable={!isLoading}
-            maxLength={10000}
-          />
-          {inputText.length > 0 && (
-            <TouchableOpacity style={styles.clearBtn} onPress={handleClearInput}>
-              <Text style={[styles.clearBtnText, { color: colors.onSurfaceDim }]}>✕ CLEAR</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* ENG → HIN chip row */}
-          <View style={styles.inputMeta}>
-            <View style={styles.langRow}>
-              <View style={[styles.langChip, { backgroundColor: colors.surfaceContainerHigh }]}>
-                <Text style={[styles.langChipText, { color: colors.onSurfaceVariant }]}>ENG</Text>
-              </View>
-              <Text style={[styles.arrow, { color: colors.onSurfaceDim }]}>→</Text>
-              <View style={[styles.langChip, { backgroundColor: colors.primary }]}>
-                <Text style={[styles.langChipText, { color: '#fff' }]}>HIN</Text>
-              </View>
-            </View>
-            <Text style={[styles.wordCount, { color: colors.onSurfaceVariant }]}>
-              WORDS: {wordCount}
-            </Text>
-          </View>
-        </View>
-
-        {/* Convert button */}
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
-          <TouchableOpacity
-            style={[
-              styles.convertBtn,
-              {
-                backgroundColor: aiMode === 'offline' ? colors.primary : colors.primary,
-                opacity: isLoading ? 0.6 : 1,
-              },
-            ]}
-            onPress={handleConvert}
-            activeOpacity={0.85}
-            disabled={isLoading}
-          >
-            <Text style={styles.convertBtnText}>
-              {aiMode === 'offline' ? 'CONVERT OFFLINE 📱' : 'CONVERT TO HINGLISH ⚡'}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Offline model not ready warning */}
-        {aiMode === 'offline' &&
-          (modelStatus === 'not_downloaded' || modelStatus === 'error') && (
-            <View
-              style={[styles.warningBanner, { backgroundColor: '#FF6B0018', borderColor: '#FF6B0044' }]}
-            >
-              <Text style={[styles.warningText, { color: '#FF6B00' }]}>
-                ⚠️ Offline model not downloaded. Go to{' '}
-                <Text style={{ fontWeight: '800' }}>Labs → Offline Model</Text> to download.
-              </Text>
-            </View>
-          )}
-
-        {/* Recent Conversions */}
-        {recentHistory.length > 0 && (
-          <View style={styles.recentSection}>
-            <View style={styles.recentHeader}>
-              <Text style={[styles.recentTitle, { color: colors.onSurfaceVariant }]}>
-                RECENT CONVERSIONS
-              </Text>
-              <Text style={[styles.filterIcon, { color: colors.onSurfaceDim }]}>⊟</Text>
-            </View>
-            {recentHistory.map((item) => (
-              <ConversionCard
-                key={item.id}
-                item={item}
-                compact
-                onPress={() =>
-                  navigation.navigate('Result', {
-                    originalText: item.originalText,
-                    convertedText: item.convertedText,
-                    source: item.source,
-                    fileName: item.fileName,
-                  })
-                }
-              />
-            ))}
-          </View>
-        )}
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-
-      <LoadingOverlay visible={isLoading} message={loadingMsg} />
       <Toast
         visible={toast.visible}
         message={toast.message}
         type={toast.type}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  root: { flex: 1 },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  headerLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 1 },
-  themeBtn: { padding: 4 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 8 },
-  hero: { marginBottom: 24, paddingLeft: 4 },
-  heroTitle: {
-    fontSize: 38,
-    fontWeight: '800',
-    letterSpacing: -1.5,
-    lineHeight: 44,
-    marginBottom: 6,
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    flex: 1,
+    textAlign: 'center',
   },
-  heroSub: {
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  aiModeBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  aiModeBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  docCard: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
   },
-  docIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  docIconText: { fontSize: 20, color: '#fff' },
-  docInfo: { flex: 1 },
-  docTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  docSub: { fontSize: 12, letterSpacing: 0.2 },
-  selectBtn: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+  hamburger: { gap: 4 },
+  hLine: { width: 18, height: 2, borderRadius: 1 },
+  hLineMid: { width: 14 },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  selectBtnText: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  inputCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    minHeight: 180,
-  },
-  input: {
-    fontSize: 16,
-    lineHeight: 26,
-    minHeight: 130,
-    textAlignVertical: 'top',
-  },
-  clearBtn: { alignSelf: 'flex-end', paddingVertical: 4, marginTop: 4 },
-  clearBtnText: { fontSize: 10, letterSpacing: 1.5, fontWeight: '600' },
-  inputMeta: {
+  avatarText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20 },
+  greetSection: { paddingTop: 32, paddingBottom: 28 },
+  greetSub: { fontSize: 15, fontWeight: '400', marginBottom: 4 },
+  greetName: { fontSize: 34, fontWeight: '800', letterSpacing: -1, lineHeight: 40, marginBottom: 8 },
+  greetQuestion: { fontSize: 18, fontWeight: '400', letterSpacing: 0.1 },
+  chipsRow: { gap: 10, paddingBottom: 28, paddingRight: 4 },
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
-  },
-  langRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  langChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 },
-  langChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  arrow: { fontSize: 14, fontWeight: '700' },
-  wordCount: { fontSize: 11, letterSpacing: 1.5, fontWeight: '600' },
-  convertBtn: {
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  convertBtnText: { color: '#fff', fontSize: 14, letterSpacing: 2, fontWeight: '800' },
-  warningBanner: {
-    borderRadius: 12,
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
     borderWidth: 1,
-    padding: 14,
-    marginBottom: 20,
   },
-  warningText: { fontSize: 12, lineHeight: 18, fontWeight: '500' },
-  recentSection: { marginBottom: 16 },
+  chipIcon: { fontSize: 14 },
+  chipLabel: { fontSize: 13, fontWeight: '500' },
+  recentSection: { marginBottom: 20 },
   recentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 14,
   },
-  recentTitle: {
-    fontSize: 11,
-    letterSpacing: 2.5,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+  recentTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  viewAll: { fontSize: 13, fontWeight: '600' },
+  viewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 13,
+    marginTop: 4,
+    gap: 6,
   },
-  filterIcon: { fontSize: 18 },
+  viewAllBtnText: { fontSize: 14, fontWeight: '500' },
+  viewAllBtnArrow: { fontSize: 18 },
+  emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyIcon: { fontSize: 42 },
+  emptyText: { fontSize: 15, fontWeight: '400', textAlign: 'center', lineHeight: 22 },
+  inputBarWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    paddingTop: 8,
+  },
 });

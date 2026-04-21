@@ -1,30 +1,34 @@
-// Precision Lab Color Palette - Dark & Light Themes
+// Simplae Word — Gemini-Style Color Palette
 
 export const DarkColors = {
-  // Surface hierarchy
-  surface: '#0b1326',
-  surfaceContainer: '#171f33',
-  surfaceContainerHigh: '#222a3d',
-  surfaceContainerHighest: '#2d3449',
-  surfaceContainerLow: '#131929',
-  surfaceContainerLowest: '#0d1220',
+  // Backgrounds
+  surface: '#0F1117',
+  surfaceContainer: '#1A1D27',
+  surfaceContainerHigh: '#22263A',
+  surfaceContainerHighest: '#2A2F45',
+  surfaceContainerLow: '#141720',
+  surfaceContainerLowest: '#0C0E16',
 
-  // Primary accent - Orange
-  primary: '#FF6B00',
-  primaryLight: '#FF8C33',
-  primaryDark: '#CC5500',
-  primaryContainer: '#FF6B00',
-  onPrimary: '#FFFFFF',
+  // Primary — Electric Violet/Blue (Gemini-dark style)
+  primary: '#8AB4F8',
+  primaryLight: '#AFC8FF',
+  primaryDark: '#5E8EE0',
+  primaryContainer: '#1E3A5F',
+  onPrimary: '#001D36',
 
-  // Secondary accent - Purple/Violet
-  secondary: '#d2bbff',
-  secondaryContainer: '#4a3f6b',
-  onSecondary: '#1a1040',
+  // Secondary
+  secondary: '#C9BBF5',
+  secondaryContainer: '#3A2F6E',
+  onSecondary: '#1A1040',
+
+  // Accent
+  accent: '#FF8AB4',
+  accentLight: '#FFB3CC',
 
   // Text hierarchy
-  onSurface: '#E8EAF0',
-  onSurfaceVariant: '#9BA3B8',
-  onSurfaceDim: '#5A6380',
+  onSurface: '#E4E7F0',
+  onSurfaceVariant: '#9BA3BC',
+  onSurfaceDim: '#545E78',
 
   // Status
   error: '#FF5252',
@@ -34,40 +38,61 @@ export const DarkColors = {
   warning: '#FFC107',
 
   // Utility
-  outline: '#3b494c',
-  outlineVariant: 'rgba(59, 73, 76, 0.15)',
+  outline: '#2E3452',
+  outlineVariant: 'rgba(46, 52, 82, 0.5)',
   scrim: 'rgba(0, 0, 0, 0.6)',
+  divider: 'rgba(255,255,255,0.06)',
+
+  // Chat bubbles
+  userBubble: '#1E3A5F',
+  aiBubble: '#1A1D27',
+  userBubbleText: '#E4E7F0',
+  aiBubbleText: '#C9CCE0',
+
+  // Input
+  inputBackground: '#1A1D27',
+  inputBorder: '#2E3452',
+  placeholderText: '#545E78',
+
+  // Card
+  cardBackground: '#1A1D27',
+  cardBorder: 'rgba(46, 52, 82, 0.8)',
 
   // Tab bar
-  tabActive: '#FF6B00',
-  tabInactive: '#5A6380',
+  tabActive: '#8AB4F8',
+  tabInactive: '#545E78',
+  tabBarBg: '#131720',
 };
 
 export const LightColors = {
-  // Surface hierarchy
-  surface: '#F5F6FA',
+  // Backgrounds — Gemini-style soft white/gray
+  surface: '#F0F2FA',
   surfaceContainer: '#FFFFFF',
-  surfaceContainerHigh: '#ECEEF5',
-  surfaceContainerHighest: '#E0E3EE',
-  surfaceContainerLow: '#F0F2F8',
-  surfaceContainerLowest: '#FAFAFA',
+  surfaceContainerHigh: '#E8EAF6',
+  surfaceContainerHighest: '#DDE0F0',
+  surfaceContainerLow: '#F5F6FD',
+  surfaceContainerLowest: '#FAFBFF',
 
-  // Primary accent - Orange
-  primary: '#E85B00',
-  primaryLight: '#FF6B00',
-  primaryDark: '#B84700',
-  primaryContainer: '#E85B00',
+  // Primary — Gemini Blue-Violet
+  primary: '#1A73E8',
+  primaryLight: '#4D97F5',
+  primaryDark: '#0D47A1',
+  primaryContainer: '#E8F0FE',
   onPrimary: '#FFFFFF',
 
   // Secondary
   secondary: '#6750A4',
-  secondaryContainer: '#E8E0FF',
+  secondaryContainer: '#EDE7F6',
   onSecondary: '#FFFFFF',
+
+  // Accent
+  accent: '#E91E8C',
+  accentLight: '#F48FB1',
 
   // Text hierarchy
   onSurface: '#1A1C2E',
-  onSurfaceVariant: '#44485C',
-  onSurfaceDim: '#767A90',
+  onSurfaceVariant: '#44485E',
+  onSurfaceDim: '#767A96',
 
   // Status
   error: '#D32F2F',
@@ -77,13 +102,30 @@ export const LightColors = {
   warning: '#F57C00',
 
   // Utility
-  outline: '#C5C8D8',
-  outlineVariant: 'rgba(197, 200, 216, 0.3)',
+  outline: '#C4C7D8',
+  outlineVariant: 'rgba(196, 199, 216, 0.4)',
   scrim: 'rgba(0, 0, 0, 0.4)',
+  divider: 'rgba(0,0,0,0.06)',
+
+  // Chat bubbles
+  userBubble: '#E8F0FE',
+  aiBubble: '#FFFFFF',
+  userBubbleText: '#1A1C2E',
+  aiBubbleText: '#1A1C2E',
+
+  // Input
+  inputBackground: '#FFFFFF',
+  inputBorder: '#C4C7D8',
+  placeholderText: '#9EA3BE',
+
+  // Card
+  cardBackground: '#FFFFFF',
+  cardBorder: 'rgba(196, 199, 216, 0.6)',
 
   // Tab bar
-  tabActive: '#E85B00',
-  tabInactive: '#767A90',
+  tabActive: '#1A73E8',
+  tabInactive: '#767A96',
+  tabBarBg: '#FFFFFF',
 };
 
 export type ColorScheme = typeof DarkColors;
