@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StatusBar,
   Switch,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -24,6 +25,24 @@ export default function SettingsScreen() {
   const [toast, setToast] = useState({
     visible: false, message: '', type: 'success' as 'success' | 'error' | 'info',
   });
+  const [customIp, setCustomIp] = useState('');
+
+  useEffect(() => {
+    storageService.getBackendUrl().then(url => {
+      if (url) setCustomIp(url);
+    });
+  }, []);
+
+  const handleSaveIp = async () => {
+    const trimmed = customIp.trim();
+    if (trimmed) {
+      await storageService.saveBackendUrl(trimmed);
+      showToast('Backend IP saved', 'success');
+    } else {
+      await storageService.saveBackendUrl('');
+      showToast('Using default Backend IP', 'success');
+    }
+  };
 
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') =>
     setToast({ visible: true, message: msg, type });
@@ -236,6 +255,27 @@ export default function SettingsScreen() {
             label="Privacy"
             sublabel="Data stored locally on device"
           />
+        </View>
+
+        {/* Developer */}
+        <SectionHeader title="DEVELOPER" />
+        <View style={[styles.section, { backgroundColor: colors.surfaceContainer, paddingVertical: 14 }]}>
+          <Text style={[styles.settingLabel, { color: colors.onSurface, marginBottom: 8 }]}>Custom Backend IP</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              style={{ flex: 1, backgroundColor: colors.surfaceContainerHigh, color: colors.onSurface, padding: 10, borderRadius: 8 }}
+              value={customIp}
+              onChangeText={setCustomIp}
+              placeholder="e.g. 192.168.1.5"
+              placeholderTextColor={colors.onSurfaceDim}
+            />
+            <TouchableOpacity onPress={handleSaveIp} style={{ backgroundColor: colors.primary, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 8 }}>
+              <Text style={{ color: colors.onPrimary, fontWeight: 'bold' }}>Save</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.settingSubLabel, { color: colors.onSurfaceDim, marginTop: 8 }]}>
+            Leave empty to use default (10.233.253.139).
+          </Text>
         </View>
 
         {/* Danger Zone */}

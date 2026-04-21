@@ -2,12 +2,13 @@ import axios, { AxiosError } from 'axios';
 import { Platform, NativeModules } from 'react-native';
 import { AIMode } from '../context/AIModelContext';
 import { localModelService } from './localModelService';
+import { storageService } from './storageService';
 
 const getHostAddress = () => {
   if (Platform.OS === 'web') return 'localhost';
 
   // Fallback IP for physical device testing
-  const LOCAL_IP = '10.189.70.144';
+  const LOCAL_IP = '10.233.253.139';
 
   // In development, extract IP from the bundler URL
   if (__DEV__) {
@@ -28,7 +29,12 @@ const getHostAddress = () => {
   return Platform.OS === 'android' ? '10.0.2.2' : LOCAL_IP;
 };
 
-const BASE_URL = `http://${getHostAddress()}:3001`;
+const getDefaultBaseUrl = () => `http://${getHostAddress()}:3001`;
+
+const getBaseUrl = async () => {
+  const custom = await storageService.getBackendUrl();
+  return custom ? `http://${custom}:3001` : getDefaultBaseUrl();
+};
 
 export interface ConversionResult {
   result: string;
@@ -57,8 +63,9 @@ export const converterService = {
   // ── Online: Gemini via backend ──────────────────────────────────────────────
   async _convertOnline(text: string): Promise<ConversionResult> {
     try {
+      const baseUrl = await getBaseUrl();
       const response = await axios.post<ConversionResult>(
-        `${BASE_URL}/convert`,
+        `${baseUrl}/convert`,
         { text },
         {
           timeout: 35000,
@@ -121,7 +128,8 @@ export const converterService = {
 
   async checkHealth(): Promise<boolean> {
     try {
-      await axios.get(`${BASE_URL}/health`, { timeout: 5000 });
+      const baseUrl = await getBaseUrl();
+      await axios.get(`${baseUrl}/health`, { timeout: 5000 });
       return true;
     } catch {
       return false;

@@ -5,6 +5,7 @@ import { ChatSession, ChatMessage } from './chatService';
 
 const HISTORY_KEY = '@hinglish_history';
 const CHAT_SESSIONS_KEY = '@chat_sessions';
+const BACKEND_URL_KEY = '@backend_url';
 
 // ─── Conversion History (unchanged API) ──────────────────────────────────────
 
@@ -128,6 +129,22 @@ export const storageService = {
   async clearAllChatSessions(): Promise<void> {
     try {
       await AsyncStorage.removeItem(CHAT_SESSIONS_KEY);
+    } catch { /* silently fail */ }
+  },
+
+  // ── Backend Configuration ───────────────────────────────────────────────────
+
+  async getBackendUrl(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(BACKEND_URL_KEY);
+    } catch {
+      return null;
+    }
+  },
+
+  async saveBackendUrl(url: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(BACKEND_URL_KEY, url);
     } catch { /* silently fail */ }
   },
 };

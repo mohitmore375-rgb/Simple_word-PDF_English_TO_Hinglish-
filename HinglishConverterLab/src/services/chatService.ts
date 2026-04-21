@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { Platform, NativeModules } from 'react-native';
+import { storageService } from './storageService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export interface ChatSession {
 
 const getHostAddress = () => {
   if (Platform.OS === 'web') return 'localhost';
-  const LOCAL_IP = '10.189.70.144';
+  const LOCAL_IP = '10.233.253.139';
   if (__DEV__) {
     try {
       const scriptURL = NativeModules.SourceCode.scriptURL;
@@ -38,7 +39,12 @@ const getHostAddress = () => {
   return Platform.OS === 'android' ? '10.0.2.2' : LOCAL_IP;
 };
 
-const BASE_URL = `http://${getHostAddress()}:3001`;
+const getDefaultBaseUrl = () => `http://${getHostAddress()}:3001`;
+
+const getBaseUrl = async () => {
+  const custom = await storageService.getBackendUrl();
+  return custom ? `http://${custom}:3001` : getDefaultBaseUrl();
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,9 +77,10 @@ export const chatService = {
     history: ChatMessage[] = []
   ): Promise<string> {
     try {
+      const baseUrl = await getBaseUrl();
       // Try dedicated chat endpoint first
       const response = await axios.post<{ result: string; response?: string }>(
-        `${BASE_URL}/chat`,
+        `${baseUrl}/chat`,
         {
           message: userText,
           history: history.slice(-10).map((m) => ({
@@ -87,8 +94,9 @@ export const chatService = {
     } catch (firstErr) {
       // Fallback: use /convert endpoint with a general prompt wrapper
       try {
+        const baseUrl = await getBaseUrl();
         const response = await axios.post<{ result: string }>(
-          `${BASE_URL}/convert`,
+          `${baseUrl}/convert`,
           {
             text: userText,
             mode: 'chat',
