@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Hinglish Converter Lab",
+    "slug": "hinglish-converter-lab",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b1326"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.precisionlab.hinglishconverter"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0b1326",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.precisionlab.hinglishconverter",
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "llama.rn"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cf72b0a9-388d-4207-aa05-08fc0ec8fbcc"
+      }
+    },
+    "owner": "mohitmore0010"
+  }
+}
